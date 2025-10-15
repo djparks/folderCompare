@@ -112,6 +112,59 @@ public class App extends Application {
         leftTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         rightTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
 
+        // Provide context menus on rows to set base folder when right-clicking directories
+        leftTable.setRowFactory(tv -> {
+            TableRow<PairedEntry> row = new TableRow<>();
+            MenuItem setBase = new MenuItem("Set as base folder");
+            ContextMenu menu = new ContextMenu(setBase);
+            setBase.setOnAction(evt -> {
+                PairedEntry pe = row.getItem();
+                if (pe != null && pe.left != null && pe.left.isDirectory()) {
+                    String base = leftPathField.getText();
+                    if (base == null || base.isBlank()) return;
+                    leftPathField.setText(Path.of(base).resolve(pe.left.getName()).toString());
+                    refresh();
+                }
+            });
+            row.itemProperty().addListener((obs, oldV, newV) -> {
+                boolean enable = newV != null && newV.left != null && newV.left.isDirectory();
+                setBase.setDisable(!enable);
+                row.setContextMenu(enable ? menu : null);
+            });
+            row.emptyProperty().addListener((obs, wasEmpty, isNowEmpty) -> {
+                if (isNowEmpty) {
+                    row.setContextMenu(null);
+                }
+            });
+            return row;
+        });
+
+        rightTable.setRowFactory(tv -> {
+            TableRow<PairedEntry> row = new TableRow<>();
+            MenuItem setBase = new MenuItem("Set as base folder");
+            ContextMenu menu = new ContextMenu(setBase);
+            setBase.setOnAction(evt -> {
+                PairedEntry pe = row.getItem();
+                if (pe != null && pe.right != null && pe.right.isDirectory()) {
+                    String base = rightPathField.getText();
+                    if (base == null || base.isBlank()) return;
+                    rightPathField.setText(Path.of(base).resolve(pe.right.getName()).toString());
+                    refresh();
+                }
+            });
+            row.itemProperty().addListener((obs, oldV, newV) -> {
+                boolean enable = newV != null && newV.right != null && newV.right.isDirectory();
+                setBase.setDisable(!enable);
+                row.setContextMenu(enable ? menu : null);
+            });
+            row.emptyProperty().addListener((obs, wasEmpty, isNowEmpty) -> {
+                if (isNowEmpty) {
+                    row.setContextMenu(null);
+                }
+            });
+            return row;
+        });
+
         // Wire toolbar actions
         refreshBtn.setOnAction(e -> refresh());
         swapBtn.setOnAction(e -> {
