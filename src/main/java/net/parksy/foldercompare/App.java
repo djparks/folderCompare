@@ -210,12 +210,14 @@ public class App extends Application {
                 rightTable.getSelectionModel().clearSelection();
             }
             updateCopyButtonIcon();
+            updateMoveButtonIcon();
         });
         rightTable.getSelectionModel().getSelectedItems().addListener((javafx.collections.ListChangeListener<PairedEntry>) c -> {
             if (!rightTable.getSelectionModel().getSelectedItems().isEmpty()) {
                 leftTable.getSelectionModel().clearSelection();
             }
             updateCopyButtonIcon();
+            updateMoveButtonIcon();
         });
 
         // Sync column widths between left and right tables
@@ -229,6 +231,7 @@ public class App extends Application {
 
         // Initialize icon state
         updateCopyButtonIcon();
+        updateMoveButtonIcon();
 
         VBox root = new VBox(toolBar, center);
 
@@ -372,6 +375,19 @@ public class App extends Application {
             icon = "←";
         }
         copyBtn.setGraphic(new Label(icon));
+    }
+
+    private void updateMoveButtonIcon() {
+        if (moveBtn == null) return;
+        boolean leftSelected = !leftTable.getSelectionModel().getSelectedItems().isEmpty();
+        boolean rightSelected = !rightTable.getSelectionModel().getSelectedItems().isEmpty();
+        String icon = "⇢"; // default neutral icon
+        if (leftSelected && !rightSelected) {
+            icon = "→";
+        } else if (rightSelected && !leftSelected) {
+            icon = "←";
+        }
+        moveBtn.setGraphic(new Label(icon));
     }
 
     private void handleCopy() {
@@ -723,10 +739,11 @@ public class App extends Application {
         try {
             Path l = Path.of(leftPath == null ? "" : leftPath);
             Path r = Path.of(rightPath == null ? "" : rightPath);
+            // Only add when both are valid directories
             if (!(Files.isDirectory(l) && Files.isDirectory(r))) return;
             String label = l.toString() + " \u2194 " + r.toString(); // left ↔ right
-            // Remove if exists to re-add at top
-            historyItems.remove(label);
+            // Only add if not already present (do not reorder existing)
+            if (historyItems.contains(label)) return;
             historyItems.add(0, label);
             // Cap at 10
             if (historyItems.size() > 10) {

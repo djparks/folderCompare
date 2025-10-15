@@ -20,5 +20,5 @@
   - [ ] Only add to history if the folder is not already in the history and both sides contain a valid folder.
 - Move Button
   - [X] Add a move button.
-  - [ ] Change the icon in the move button to be an arrow pointing left if rows on the right are selected and pointing right if rows on the left are selected.
+  - [X] Change the icon in the move button to be an arrow pointing left if rows on the right are selected and pointing right if rows on the left are selected.
   - [ ] In the verification dialog, have the word left on the left side and right on the right side, with the arrow pointing the to direction the of the move.
