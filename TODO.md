@@ -7,7 +7,7 @@
   - [X] Allow copy to work even if file already exists and ask if overwrite if file already exists.
   - [X] Change copy icon to point left if copying from the right side and point right if copying from the left side.
   - [X] Add delete button with confirmation dialog.
-  - [ ] Make the copy button work for folders recursively.
+  - [X] Make the copy button work for folders recursively.
 - Other improvements
   - [X] Reduce initial size column
   - [X] Size columns the same on both sides.
@@ -15,5 +15,8 @@
   - [X] Unselect items on opposite side.
   - [X] Add color for only one side and if files don't match
   - [X] Right-click to set as base folder (one side or both if matched)
-  - [ ] Add a move button.
-  - [ ] Add a history of folders chosen, keep the last 10, allowing selection using a drop-down.
+  - [X] Add a history of folders chosen, keep the last 10, allowing selection using a drop-down.
+- Move Button
+  - [X] Add a move button.
+  - [ ] Change the icon in the move button to be an arrow pointing left if rows on the right are selected and pointing right if rows on the left are selected.
+  - [ ] In the verification dialog, have the word left on the left side and right on the right side, with the arrow pointing the to direction the of the move.

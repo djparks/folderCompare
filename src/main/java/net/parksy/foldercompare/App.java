@@ -50,7 +50,11 @@ public class App extends Application {
     private final ObservableList<PairedEntry> items = FXCollections.observableArrayList();
 
     private Button copyBtn;
+    private Button moveBtn;
     private Button deleteBtn;
+
+    private final ComboBox<String> historyCombo = new ComboBox<>();
+    private final ObservableList<String> historyItems = FXCollections.observableArrayList();
 
     private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -61,13 +65,30 @@ public class App extends Application {
         // Toolbar at top
         copyBtn = new Button("Copy", new Label("⧉"));
         copyBtn.setContentDisplay(ContentDisplay.LEFT);
+        moveBtn = new Button("Move", new Label("⇢"));
+        moveBtn.setContentDisplay(ContentDisplay.LEFT);
         deleteBtn = new Button("Delete", new Label("🗑"));
         deleteBtn.setContentDisplay(ContentDisplay.LEFT);
         Button refreshBtn = new Button("Refresh", new Label("↻"));
         refreshBtn.setContentDisplay(ContentDisplay.LEFT);
         Button swapBtn = new Button("Swap", new Label("⇄"));
         swapBtn.setContentDisplay(ContentDisplay.LEFT);
-        ToolBar toolBar = new ToolBar(copyBtn, deleteBtn, refreshBtn, swapBtn);
+
+        historyCombo.setPromptText("Recent");
+        historyCombo.setItems(historyItems);
+        historyCombo.setOnAction(e -> {
+            String sel = historyCombo.getSelectionModel().getSelectedItem();
+            if (sel != null && sel.contains(" \u2194 ")) { // left ↔ right
+                String[] parts = sel.split(" \u2194 ", 2);
+                if (parts.length == 2) {
+                    leftPathField.setText(parts[0]);
+                    rightPathField.setText(parts[1]);
+                    refresh();
+                }
+            }
+        });
+
+        ToolBar toolBar = new ToolBar(copyBtn, moveBtn, deleteBtn, new Separator(), refreshBtn, swapBtn, new Label("History:"), historyCombo);
 
         // Left panel
         leftPathField.setPromptText("Enter folder path and press Enter or drop a folder here");
@@ -174,11 +195,13 @@ public class App extends Application {
             refresh();
         });
         copyBtn.setOnAction(e -> handleCopy());
+        moveBtn.setOnAction(e -> handleMove());
         deleteBtn.setOnAction(e -> handleDelete());
-        // Enable Copy/Delete only if some row is selected on either side
+        // Enable Copy/Move/Delete only if some row is selected on either side
         var noSelection = Bindings.isEmpty(leftTable.getSelectionModel().getSelectedItems())
                 .and(Bindings.isEmpty(rightTable.getSelectionModel().getSelectedItems()));
         copyBtn.disableProperty().bind(noSelection);
+        moveBtn.disableProperty().bind(noSelection);
         deleteBtn.disableProperty().bind(noSelection);
 
         // Selection exclusivity and icon update
@@ -371,21 +394,16 @@ public class App extends Application {
                 ? new ArrayList<>(leftTable.getSelectionModel().getSelectedItems())
                 : new ArrayList<>(rightTable.getSelectionModel().getSelectedItems());
 
-        // Filter to copyable files (skip directories)
-        List<String> names = new ArrayList<>();
+        // Collect targets (files and folders)
+        List<FileInfo> targets = new ArrayList<>();
         for (PairedEntry pe : selected) {
-            if (leftToRight) {
-                if (pe.left != null && !pe.left.isDirectory()) {
-                    names.add(pe.left.getName());
-                }
-            } else {
-                if (pe.right != null && !pe.right.isDirectory()) {
-                    names.add(pe.right.getName());
-                }
+            FileInfo fi = leftToRight ? pe.left : pe.right;
+            if (fi != null) {
+                targets.add(fi);
             }
         }
-        if (names.isEmpty()) {
-            Alert a = new Alert(Alert.AlertType.INFORMATION, "No files selected to copy. (Folders are currently not supported)", ButtonType.OK);
+        if (targets.isEmpty()) {
+            Alert a = new Alert(Alert.AlertType.INFORMATION, "Nothing selected to copy.", ButtonType.OK);
             a.setHeaderText("Nothing to copy");
             a.showAndWait();
             return;
@@ -402,17 +420,21 @@ public class App extends Application {
             return;
         }
 
+        long dirCount = targets.stream().filter(FileInfo::isDirectory).count();
+        long fileCount = targets.size() - dirCount;
+
         String direction = leftToRight ? "left → right" : "right → left";
-        String header = names.size() == 1 ? ("Copy 1 file?") : ("Copy " + names.size() + " files?");
-        String content = (names.size() == 1
-                ? ("Copy '" + names.get(0) + "' from " + direction + "?\n\n")
-                : ("Copy " + names.size() + " files from " + direction + "?\n\n"))
-                + "Warning: Existing files with the same name will be overwritten.";
+        String header = "Copy " + targets.size() + (targets.size() == 1 ? " item?" : " items?");
+        StringBuilder content = new StringBuilder();
+        content.append("From ").append(direction).append("\n\n");
+        content.append("Files: ").append(fileCount).append("\n");
+        content.append("Folders: ").append(dirCount).append("\n\n");
+        content.append("Existing files with the same name will be overwritten.");
 
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
         confirm.setTitle("Confirm Copy");
         confirm.setHeaderText(header);
-        confirm.setContentText(content);
+        confirm.setContentText(content.toString());
         confirm.getButtonTypes().setAll(ButtonType.YES, ButtonType.NO);
         ButtonType result = confirm.showAndWait().orElse(ButtonType.NO);
         if (result != ButtonType.YES) {
@@ -421,23 +443,130 @@ public class App extends Application {
 
         int success = 0;
         int fail = 0;
-        for (String name : names) {
+        for (FileInfo fi : targets) {
+            Path src = srcDir.resolve(fi.getName());
+            Path dst = dstDir.resolve(fi.getName());
             try {
-                Path src = srcDir.resolve(name);
-                Path dst = dstDir.resolve(name);
-                Files.createDirectories(dst.getParent());
-                Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
+                if (fi.isDirectory()) {
+                    copyRecursive(src, dst);
+                } else {
+                    Files.createDirectories(dst.getParent());
+                    Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
+                }
                 success++;
                 System.out.println("[INFO] Copied " + (leftToRight ? "left->right" : "right->left") + ": " + src + " -> " + dst);
             } catch (Exception ex) {
                 fail++;
-                System.out.println("[WARN] Copy failed for '" + name + "': " + ex.getMessage());
+                System.out.println("[WARN] Copy failed for '" + src + "': " + ex.getMessage());
             }
         }
 
         if (fail > 0) {
             Alert done = new Alert(Alert.AlertType.INFORMATION, success + " copied, " + fail + " failed.", ButtonType.OK);
             done.setHeaderText("Copy completed with issues");
+            done.showAndWait();
+        }
+
+        refresh();
+    }
+
+    private void handleMove() {
+        // Determine which side is active
+        boolean leftActive = !leftTable.getSelectionModel().getSelectedItems().isEmpty();
+        boolean rightActive = !rightTable.getSelectionModel().getSelectedItems().isEmpty();
+        if (!leftActive && !rightActive) {
+            System.out.println("[INFO] No selection to move.");
+            return;
+        }
+        if (leftActive && rightActive) {
+            Alert a = new Alert(Alert.AlertType.INFORMATION, "Select rows on only one side to move.", ButtonType.OK);
+            a.setHeaderText("Ambiguous selection");
+            a.showAndWait();
+            return;
+        }
+
+        boolean leftToRight = leftActive; // if left is active, move left->right; otherwise right->left
+        List<PairedEntry> selected = leftActive
+                ? new ArrayList<>(leftTable.getSelectionModel().getSelectedItems())
+                : new ArrayList<>(rightTable.getSelectionModel().getSelectedItems());
+
+        // Collect targets (files and folders)
+        List<FileInfo> targets = new ArrayList<>();
+        for (PairedEntry pe : selected) {
+            FileInfo fi = leftToRight ? pe.left : pe.right;
+            if (fi != null) {
+                targets.add(fi);
+            }
+        }
+        if (targets.isEmpty()) {
+            Alert a = new Alert(Alert.AlertType.INFORMATION, "Nothing selected to move.", ButtonType.OK);
+            a.setHeaderText("Nothing to move");
+            a.showAndWait();
+            return;
+        }
+
+        String srcFolder = leftToRight ? leftPathField.getText() : rightPathField.getText();
+        String dstFolder = leftToRight ? rightPathField.getText() : leftPathField.getText();
+        Path srcDir = Path.of(srcFolder == null ? "" : srcFolder);
+        Path dstDir = Path.of(dstFolder == null ? "" : dstFolder);
+        if (!(Files.isDirectory(srcDir) && Files.isDirectory(dstDir))) {
+            Alert a = new Alert(Alert.AlertType.WARNING, "Both left and right paths must be valid directories.", ButtonType.OK);
+            a.setHeaderText("Invalid folders");
+            a.showAndWait();
+            return;
+        }
+
+        long dirCount = targets.stream().filter(FileInfo::isDirectory).count();
+        long fileCount = targets.size() - dirCount;
+
+        String direction = leftToRight ? "left → right" : "right → left";
+        String header = "Move " + targets.size() + (targets.size() == 1 ? " item?" : " items?");
+        StringBuilder content = new StringBuilder();
+        content.append("From ").append(direction).append("\n\n");
+        content.append("Files: ").append(fileCount).append("\n");
+        content.append("Folders: ").append(dirCount).append("\n\n");
+        content.append("Warning: Existing files with the same name at the destination will be overwritten.\n");
+        content.append("Items will be removed from the source after moving.");
+
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Confirm Move");
+        confirm.setHeaderText(header);
+        confirm.setContentText(content.toString());
+        confirm.getButtonTypes().setAll(ButtonType.YES, ButtonType.NO);
+        ButtonType result = confirm.showAndWait().orElse(ButtonType.NO);
+        if (result != ButtonType.YES) {
+            return;
+        }
+
+        int success = 0;
+        int fail = 0;
+        for (FileInfo fi : targets) {
+            Path src = srcDir.resolve(fi.getName());
+            Path dst = dstDir.resolve(fi.getName());
+            try {
+                if (fi.isDirectory()) {
+                    moveRecursive(src, dst);
+                } else {
+                    // Try direct move, fallback to copy+delete
+                    try {
+                        Files.createDirectories(dst.getParent());
+                        Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING);
+                    } catch (Exception ex) {
+                        copyRecursive(src, dst);
+                        deleteRecursive(src);
+                    }
+                }
+                success++;
+                System.out.println("[INFO] Moved " + (leftToRight ? "left->right" : "right->left") + ": " + src + " -> " + dst);
+            } catch (Exception ex) {
+                fail++;
+                System.out.println("[WARN] Move failed for '" + src + "': " + ex.getMessage());
+            }
+        }
+
+        if (fail > 0) {
+            Alert done = new Alert(Alert.AlertType.INFORMATION, success + " moved, " + fail + " failed.", ButtonType.OK);
+            done.setHeaderText("Move completed with issues");
             done.showAndWait();
         }
 
@@ -554,6 +683,59 @@ public class App extends Application {
         }
     }
 
+    private void copyRecursive(Path src, Path dst) throws Exception {
+        if (!Files.exists(src)) return;
+        if (Files.isDirectory(src)) {
+            // Create root folder
+            Files.createDirectories(dst);
+            try (java.util.stream.Stream<Path> walk = Files.walk(src)) {
+                for (Path p : walk.toList()) {
+                    Path rel = src.relativize(p);
+                    Path target = dst.resolve(rel);
+                    if (Files.isDirectory(p)) {
+                        Files.createDirectories(target);
+                    } else {
+                        Files.createDirectories(target.getParent());
+                        Files.copy(p, target, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                }
+            }
+        } else {
+            Files.createDirectories(dst.getParent());
+            Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
+        }
+    }
+
+    private void moveRecursive(Path src, Path dst) throws Exception {
+        // Try simple move first
+        try {
+            Files.createDirectories(dst.getParent());
+            Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING);
+            return;
+        } catch (Exception ignore) {
+            // Fall back to copy+delete (handles moving into existing/non-empty dirs or across filesystems)
+        }
+        copyRecursive(src, dst);
+        deleteRecursive(src);
+    }
+
+    private void addToHistoryIfValid(String leftPath, String rightPath) {
+        try {
+            Path l = Path.of(leftPath == null ? "" : leftPath);
+            Path r = Path.of(rightPath == null ? "" : rightPath);
+            if (!(Files.isDirectory(l) && Files.isDirectory(r))) return;
+            String label = l.toString() + " \u2194 " + r.toString(); // left ↔ right
+            // Remove if exists to re-add at top
+            historyItems.remove(label);
+            historyItems.add(0, label);
+            // Cap at 10
+            if (historyItems.size() > 10) {
+                historyItems.remove(10, historyItems.size());
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
     private void refresh() {
         String leftPath = leftPathField.getText() == null ? "" : leftPathField.getText().trim();
         String rightPath = rightPathField.getText() == null ? "" : rightPathField.getText().trim();
@@ -573,6 +755,9 @@ public class App extends Application {
         }
 
         items.setAll(list);
+
+        // Update history (only when both are valid directories)
+        addToHistoryIfValid(leftPath, rightPath);
     }
 
     private Map<String, FileInfo> scanDir(String pathText) {
