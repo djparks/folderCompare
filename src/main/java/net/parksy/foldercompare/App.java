@@ -38,11 +38,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
+import java.util.prefs.Preferences;
 
 public class App extends Application {
 
     private final TextField leftPathField = new TextField();
     private final TextField rightPathField = new TextField();
+
+    private static final String PREF_NODE = "net.parksy.foldercompare";
+    private static final String PREF_HISTORY_COUNT = "history.count";
+    private static final String PREF_HISTORY_PREFIX = "history.";
+    private Preferences prefs;
 
     private final TableView<PairedEntry> leftTable = new TableView<>();
     private final TableView<PairedEntry> rightTable = new TableView<>();
@@ -62,6 +68,9 @@ public class App extends Application {
     public void start(Stage stage) {
         stage.setTitle("Folder Compare");
 
+        // Initialize preferences and load history
+        prefs = Preferences.userRoot().node(PREF_NODE);
+
         // Toolbar at top
         copyBtn = new Button("Copy", new Label("⧉"));
         copyBtn.setContentDisplay(ContentDisplay.LEFT);
@@ -76,6 +85,8 @@ public class App extends Application {
 
         historyCombo.setPromptText("Recent");
         historyCombo.setItems(historyItems);
+        // Load persisted history
+        loadHistoryFromPrefs();
         historyCombo.setOnAction(e -> {
             String sel = historyCombo.getSelectionModel().getSelectedItem();
             if (sel != null && sel.contains(" \u2194 ")) { // left ↔ right
@@ -737,11 +748,11 @@ public class App extends Application {
 
     private void addToHistoryIfValid(String leftPath, String rightPath) {
         try {
-            Path l = Path.of(leftPath == null ? "" : leftPath);
-            Path r = Path.of(rightPath == null ? "" : rightPath);
-            // Only add when both are valid directories
-            if (!(Files.isDirectory(l) && Files.isDirectory(r))) return;
-            String label = l.toString() + " \u2194 " + r.toString(); // left ↔ right
+            String l = leftPath == null ? "" : leftPath.trim();
+            String r = rightPath == null ? "" : rightPath.trim();
+            // Only add when both values are non-blank (do not require directories to exist)
+            if (l.isBlank() || r.isBlank()) return;
+            String label = l + " \u2194 " + r; // left ↔ right
             // Only add if not already present (do not reorder existing)
             if (historyItems.contains(label)) return;
             historyItems.add(0, label);
@@ -749,6 +760,44 @@ public class App extends Application {
             if (historyItems.size() > 10) {
                 historyItems.remove(10, historyItems.size());
             }
+            saveHistoryToPrefs();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void loadHistoryFromPrefs() {
+        try {
+            if (prefs == null) return;
+            historyItems.clear();
+            int count = Math.max(0, Math.min(10, prefs.getInt(PREF_HISTORY_COUNT, 0)));
+            for (int i = 0; i < count; i++) {
+                String v = prefs.get(PREF_HISTORY_PREFIX + i, null);
+                if (v != null && !v.isBlank()) {
+                    historyItems.add(v);
+                }
+            }
+            // Ensure cap at 10
+            if (historyItems.size() > 10) {
+                historyItems.remove(10, historyItems.size());
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void saveHistoryToPrefs() {
+        try {
+            if (prefs == null) return;
+            // Clear existing keys first
+            int prev = prefs.getInt(PREF_HISTORY_COUNT, 0);
+            for (int i = 0; i < Math.max(prev, 10); i++) {
+                prefs.remove(PREF_HISTORY_PREFIX + i);
+            }
+            int count = Math.min(10, historyItems.size());
+            prefs.putInt(PREF_HISTORY_COUNT, count);
+            for (int i = 0; i < count; i++) {
+                prefs.put(PREF_HISTORY_PREFIX + i, historyItems.get(i));
+            }
+            prefs.flush();
         } catch (Exception ignored) {
         }
     }
@@ -802,6 +851,12 @@ public class App extends Application {
         } catch (Exception ignored) {
         }
         return map;
+    }
+
+    @Override
+    public void stop() {
+        // Ensure history is persisted on application exit
+        saveHistoryToPrefs();
     }
 
     public static void main(String[] args) {
