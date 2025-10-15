@@ -49,6 +49,8 @@ public class App extends Application {
 
     private final ObservableList<PairedEntry> items = FXCollections.observableArrayList();
 
+    private Button copyBtn;
+
     private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Override
@@ -56,7 +58,7 @@ public class App extends Application {
         stage.setTitle("Folder Compare");
 
         // Toolbar at top
-        Button copyBtn = new Button("Copy", new Label("⧉"));
+        copyBtn = new Button("Copy", new Label("⧉"));
         copyBtn.setContentDisplay(ContentDisplay.LEFT);
         Button refreshBtn = new Button("Refresh", new Label("↻"));
         refreshBtn.setContentDisplay(ContentDisplay.LEFT);
@@ -93,6 +95,9 @@ public class App extends Application {
         // Both tables share the same items list to keep rows aligned
         leftTable.setItems(items);
         rightTable.setItems(items);
+        // Allow multiple selection on either side
+        leftTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
+        rightTable.getSelectionModel().setSelectionMode(SelectionMode.MULTIPLE);
 
         HBox center = new HBox(10, leftPane, rightPane);
         center.setPadding(new Insets(10));
@@ -115,9 +120,35 @@ public class App extends Application {
         copyBtn.setOnAction(e -> handleCopy());
         // Enable Copy only if some row is selected on either side
         copyBtn.disableProperty().bind(
-                Bindings.isNull(leftTable.getSelectionModel().selectedItemProperty())
-                        .and(Bindings.isNull(rightTable.getSelectionModel().selectedItemProperty()))
+                Bindings.isEmpty(leftTable.getSelectionModel().getSelectedItems())
+                        .and(Bindings.isEmpty(rightTable.getSelectionModel().getSelectedItems()))
         );
+
+        // Selection exclusivity and icon update
+        leftTable.getSelectionModel().getSelectedItems().addListener((javafx.collections.ListChangeListener<PairedEntry>) c -> {
+            if (!leftTable.getSelectionModel().getSelectedItems().isEmpty()) {
+                rightTable.getSelectionModel().clearSelection();
+            }
+            updateCopyButtonIcon();
+        });
+        rightTable.getSelectionModel().getSelectedItems().addListener((javafx.collections.ListChangeListener<PairedEntry>) c -> {
+            if (!rightTable.getSelectionModel().getSelectedItems().isEmpty()) {
+                leftTable.getSelectionModel().clearSelection();
+            }
+            updateCopyButtonIcon();
+        });
+
+        // Sync column widths between left and right tables
+        if (leftTable.getColumns().size() == rightTable.getColumns().size()) {
+            for (int i = 0; i < leftTable.getColumns().size(); i++) {
+                TableColumn<PairedEntry, ?> lc = leftTable.getColumns().get(i);
+                TableColumn<PairedEntry, ?> rc = rightTable.getColumns().get(i);
+                lc.prefWidthProperty().bindBidirectional(rc.prefWidthProperty());
+            }
+        }
+
+        // Initialize icon state
+        updateCopyButtonIcon();
 
         VBox root = new VBox(toolBar, center);
 
@@ -242,68 +273,109 @@ public class App extends Application {
         });
     }
 
-    private void handleCopy() {
-        PairedEntry sel = leftTable.getSelectionModel().getSelectedItem();
-        boolean fromLeft = true;
-        if (sel == null) {
-            sel = rightTable.getSelectionModel().getSelectedItem();
-            fromLeft = false;
+    private void updateCopyButtonIcon() {
+        if (copyBtn == null) return;
+        boolean leftSelected = !leftTable.getSelectionModel().getSelectedItems().isEmpty();
+        boolean rightSelected = !rightTable.getSelectionModel().getSelectedItems().isEmpty();
+        String icon = "⧉";
+        if (leftSelected && !rightSelected) {
+            icon = "→";
+        } else if (rightSelected && !leftSelected) {
+            icon = "←";
         }
-        if (sel == null) {
+        copyBtn.setGraphic(new Label(icon));
+    }
+
+    private void handleCopy() {
+        // Determine which side is active
+        boolean leftActive = !leftTable.getSelectionModel().getSelectedItems().isEmpty();
+        boolean rightActive = !rightTable.getSelectionModel().getSelectedItems().isEmpty();
+        if (!leftActive && !rightActive) {
             System.out.println("[INFO] No selection to copy.");
             return;
         }
-        try {
-            boolean canCopy = false;
-            boolean leftToRight = false;
-            String name = null;
-            if (sel.isOrphanLeft() && sel.left != null && !sel.left.isDirectory()) {
-                canCopy = true;
-                leftToRight = true;
-                name = sel.left.getName();
-            } else if (sel.isOrphanRight() && sel.right != null && !sel.right.isDirectory()) {
-                canCopy = true;
-                leftToRight = false;
-                name = sel.right.getName();
-            }
-
-            if (!canCopy) {
-                Alert a = new Alert(Alert.AlertType.INFORMATION, "Select a single file that exists on one side only to copy.", ButtonType.OK);
-                a.setHeaderText("Copy not available");
-                a.showAndWait();
-                return;
-            }
-
-            String srcFolder = leftToRight ? leftPathField.getText() : rightPathField.getText();
-            String dstFolder = leftToRight ? rightPathField.getText() : leftPathField.getText();
-            Path srcDir = Path.of(srcFolder == null ? "" : srcFolder);
-            Path dstDir = Path.of(dstFolder == null ? "" : dstFolder);
-            if (!(Files.isDirectory(srcDir) && Files.isDirectory(dstDir))) {
-                Alert a = new Alert(Alert.AlertType.WARNING, "Both left and right paths must be valid directories.", ButtonType.OK);
-                a.setHeaderText("Invalid folders");
-                a.showAndWait();
-                return;
-            }
-
-            String direction = leftToRight ? "left → right" : "right → left";
-            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
-            confirm.setTitle("Confirm Copy");
-            confirm.setHeaderText("Copy file?");
-            confirm.setContentText("Copy '" + name + "' from " + direction + "? This will overwrite if the file exists.");
-            confirm.getButtonTypes().setAll(ButtonType.YES, ButtonType.NO);
-            ButtonType result = confirm.showAndWait().orElse(ButtonType.NO);
-            if (result != ButtonType.YES) {
-                return;
-            }
-
-            Path src = srcDir.resolve(name);
-            Path dst = dstDir.resolve(name);
-            Files.createDirectories(dst.getParent());
-            Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
-            System.out.println("[INFO] Copied " + (leftToRight ? "left->right" : "right->left") + ": " + src + " -> " + dst);
-        } catch (Exception ex) {
-            System.out.println("[WARN] Copy failed: " + ex.getMessage());
+        if (leftActive && rightActive) {
+            Alert a = new Alert(Alert.AlertType.INFORMATION, "Select rows on only one side to copy.", ButtonType.OK);
+            a.setHeaderText("Ambiguous selection");
+            a.showAndWait();
+            return;
         }
+
+        boolean leftToRight = leftActive; // if left is active, we copy left->right; otherwise right->left
+        List<PairedEntry> selected = leftActive
+                ? new ArrayList<>(leftTable.getSelectionModel().getSelectedItems())
+                : new ArrayList<>(rightTable.getSelectionModel().getSelectedItems());
+
+        // Filter to copyable files (skip directories)
+        List<String> names = new ArrayList<>();
+        for (PairedEntry pe : selected) {
+            if (leftToRight) {
+                if (pe.left != null && !pe.left.isDirectory()) {
+                    names.add(pe.left.getName());
+                }
+            } else {
+                if (pe.right != null && !pe.right.isDirectory()) {
+                    names.add(pe.right.getName());
+                }
+            }
+        }
+        if (names.isEmpty()) {
+            Alert a = new Alert(Alert.AlertType.INFORMATION, "No files selected to copy. (Folders are currently not supported)", ButtonType.OK);
+            a.setHeaderText("Nothing to copy");
+            a.showAndWait();
+            return;
+        }
+
+        String srcFolder = leftToRight ? leftPathField.getText() : rightPathField.getText();
+        String dstFolder = leftToRight ? rightPathField.getText() : leftPathField.getText();
+        Path srcDir = Path.of(srcFolder == null ? "" : srcFolder);
+        Path dstDir = Path.of(dstFolder == null ? "" : dstFolder);
+        if (!(Files.isDirectory(srcDir) && Files.isDirectory(dstDir))) {
+            Alert a = new Alert(Alert.AlertType.WARNING, "Both left and right paths must be valid directories.", ButtonType.OK);
+            a.setHeaderText("Invalid folders");
+            a.showAndWait();
+            return;
+        }
+
+        String direction = leftToRight ? "left → right" : "right → left";
+        String header = names.size() == 1 ? ("Copy 1 file?") : ("Copy " + names.size() + " files?");
+        String content = (names.size() == 1
+                ? ("Copy '" + names.get(0) + "' from " + direction + "?\n\n")
+                : ("Copy " + names.size() + " files from " + direction + "?\n\n"))
+                + "Warning: Existing files with the same name will be overwritten.";
+
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Confirm Copy");
+        confirm.setHeaderText(header);
+        confirm.setContentText(content);
+        confirm.getButtonTypes().setAll(ButtonType.YES, ButtonType.NO);
+        ButtonType result = confirm.showAndWait().orElse(ButtonType.NO);
+        if (result != ButtonType.YES) {
+            return;
+        }
+
+        int success = 0;
+        int fail = 0;
+        for (String name : names) {
+            try {
+                Path src = srcDir.resolve(name);
+                Path dst = dstDir.resolve(name);
+                Files.createDirectories(dst.getParent());
+                Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
+                success++;
+                System.out.println("[INFO] Copied " + (leftToRight ? "left->right" : "right->left") + ": " + src + " -> " + dst);
+            } catch (Exception ex) {
+                fail++;
+                System.out.println("[WARN] Copy failed for '" + name + "': " + ex.getMessage());
+            }
+        }
+
+        if (fail > 0) {
+            Alert done = new Alert(Alert.AlertType.INFORMATION, success + " copied, " + fail + " failed.", ButtonType.OK);
+            done.setHeaderText("Copy completed with issues");
+            done.showAndWait();
+        }
+
         refresh();
     }
 
