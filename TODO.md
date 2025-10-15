@@ -26,4 +26,4 @@
   - [X] Make the minimum window height extend just below the tables at startup. 
   - [X] Make the table heights resize with the window.
 - Refactoring
-  - [ ] get rid of god class.
+  - [X] get rid of god class.

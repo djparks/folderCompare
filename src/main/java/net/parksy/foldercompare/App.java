@@ -32,6 +32,12 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import net.parksy.foldercompare.model.FileInfo;
+import net.parksy.foldercompare.model.PairedEntry;
+import net.parksy.foldercompare.fs.DirectoryScanner;
+import net.parksy.foldercompare.fs.FileOperations;
+import net.parksy.foldercompare.prefs.HistoryService;
+import net.parksy.foldercompare.Constants;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -45,10 +51,7 @@ public class App extends Application {
     private final TextField leftPathField = new TextField();
     private final TextField rightPathField = new TextField();
 
-    private static final String PREF_NODE = "net.parksy.foldercompare";
-    private static final String PREF_HISTORY_COUNT = "history.count";
-    private static final String PREF_HISTORY_PREFIX = "history.";
-    private Preferences prefs;
+    private HistoryService historyService;
 
     private final TableView<PairedEntry> leftTable = new TableView<>();
     private final TableView<PairedEntry> rightTable = new TableView<>();
@@ -68,19 +71,19 @@ public class App extends Application {
     public void start(Stage stage) {
         stage.setTitle("Folder Compare");
 
-        // Initialize preferences and load history
-        prefs = Preferences.userRoot().node(PREF_NODE);
+        // Initialize services
+        historyService = new HistoryService();
 
         // Toolbar at top
-        copyBtn = new Button("Copy", new Label("⧉"));
+        copyBtn = new Button("Copy", new Label(Constants.ICON_COPY_NEUTRAL));
         copyBtn.setContentDisplay(ContentDisplay.LEFT);
-        moveBtn = new Button("Move", new Label("⇢"));
+        moveBtn = new Button("Move", new Label(Constants.ICON_MOVE_NEUTRAL));
         moveBtn.setContentDisplay(ContentDisplay.LEFT);
-        deleteBtn = new Button("Delete", new Label("🗑"));
+        deleteBtn = new Button("Delete", new Label(Constants.ICON_TRASH));
         deleteBtn.setContentDisplay(ContentDisplay.LEFT);
-        Button refreshBtn = new Button("Refresh", new Label("↻"));
+        Button refreshBtn = new Button("Refresh", new Label(Constants.ICON_REFRESH));
         refreshBtn.setContentDisplay(ContentDisplay.LEFT);
-        Button swapBtn = new Button("Swap", new Label("⇄"));
+        Button swapBtn = new Button("Swap", new Label(Constants.ICON_SWAP));
         swapBtn.setContentDisplay(ContentDisplay.LEFT);
 
         historyCombo.setPromptText("Recent");
@@ -153,15 +156,15 @@ public class App extends Application {
             ContextMenu menu = new ContextMenu(setBase);
             setBase.setOnAction(evt -> {
                 PairedEntry pe = row.getItem();
-                if (pe != null && pe.left != null && pe.left.isDirectory()) {
+                if (pe != null && pe.getLeft() != null && pe.getLeft().isDirectory()) {
                     String base = leftPathField.getText();
                     if (base == null || base.isBlank()) return;
-                    leftPathField.setText(Path.of(base).resolve(pe.left.getName()).toString());
+                    leftPathField.setText(Path.of(base).resolve(pe.getLeft().getName()).toString());
                     refresh();
                 }
             });
             row.itemProperty().addListener((obs, oldV, newV) -> {
-                boolean enable = newV != null && newV.left != null && newV.left.isDirectory();
+                boolean enable = newV != null && newV.getLeft() != null && newV.getLeft().isDirectory();
                 setBase.setDisable(!enable);
                 row.setContextMenu(enable ? menu : null);
             });
@@ -179,15 +182,15 @@ public class App extends Application {
             ContextMenu menu = new ContextMenu(setBase);
             setBase.setOnAction(evt -> {
                 PairedEntry pe = row.getItem();
-                if (pe != null && pe.right != null && pe.right.isDirectory()) {
+                if (pe != null && pe.getRight() != null && pe.getRight().isDirectory()) {
                     String base = rightPathField.getText();
                     if (base == null || base.isBlank()) return;
-                    rightPathField.setText(Path.of(base).resolve(pe.right.getName()).toString());
+                    rightPathField.setText(Path.of(base).resolve(pe.getRight().getName()).toString());
                     refresh();
                 }
             });
             row.itemProperty().addListener((obs, oldV, newV) -> {
-                boolean enable = newV != null && newV.right != null && newV.right.isDirectory();
+                boolean enable = newV != null && newV.getRight() != null && newV.getRight().isDirectory();
                 setBase.setDisable(!enable);
                 row.setContextMenu(enable ? menu : null);
             });
@@ -383,11 +386,11 @@ public class App extends Application {
         if (copyBtn == null) return;
         boolean leftSelected = !leftTable.getSelectionModel().getSelectedItems().isEmpty();
         boolean rightSelected = !rightTable.getSelectionModel().getSelectedItems().isEmpty();
-        String icon = "⧉";
+        String icon = Constants.ICON_COPY_NEUTRAL;
         if (leftSelected && !rightSelected) {
-            icon = "→";
+            icon = Constants.ICON_ARROW_RIGHT;
         } else if (rightSelected && !leftSelected) {
-            icon = "←";
+            icon = Constants.ICON_ARROW_LEFT;
         }
         copyBtn.setGraphic(new Label(icon));
     }
@@ -428,7 +431,7 @@ public class App extends Application {
         // Collect targets (files and folders)
         List<FileInfo> targets = new ArrayList<>();
         for (PairedEntry pe : selected) {
-            FileInfo fi = leftToRight ? pe.left : pe.right;
+            FileInfo fi = leftToRight ? pe.getLeft() : pe.getRight();
             if (fi != null) {
                 targets.add(fi);
             }
@@ -479,7 +482,7 @@ public class App extends Application {
             Path dst = dstDir.resolve(fi.getName());
             try {
                 if (fi.isDirectory()) {
-                    copyRecursive(src, dst);
+                    FileOperations.copyRecursive(src, dst);
                 } else {
                     Files.createDirectories(dst.getParent());
                     Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
@@ -524,7 +527,7 @@ public class App extends Application {
         // Collect targets (files and folders)
         List<FileInfo> targets = new ArrayList<>();
         for (PairedEntry pe : selected) {
-            FileInfo fi = leftToRight ? pe.left : pe.right;
+            FileInfo fi = leftToRight ? pe.getLeft() : pe.getRight();
             if (fi != null) {
                 targets.add(fi);
             }
@@ -576,15 +579,15 @@ public class App extends Application {
             Path dst = dstDir.resolve(fi.getName());
             try {
                 if (fi.isDirectory()) {
-                    moveRecursive(src, dst);
+                    FileOperations.moveRecursive(src, dst);
                 } else {
                     // Try direct move, fallback to copy+delete
                     try {
                         Files.createDirectories(dst.getParent());
                         Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING);
                     } catch (Exception ex) {
-                        copyRecursive(src, dst);
-                        deleteRecursive(src);
+                        FileOperations.copyRecursive(src, dst);
+                        FileOperations.deleteRecursive(src);
                     }
                 }
                 success++;
@@ -640,7 +643,7 @@ public class App extends Application {
         // Collect targets with names and directory flag
         List<FileInfo> targets = new ArrayList<>();
         for (PairedEntry pe : selected) {
-            FileInfo fi = deleteLeft ? pe.left : pe.right;
+            FileInfo fi = deleteLeft ? pe.getLeft() : pe.getRight();
             if (fi != null) {
                 targets.add(fi);
             }
@@ -679,7 +682,7 @@ public class App extends Application {
             Path p = targetDir.resolve(fi.getName());
             try {
                 if (fi.isDirectory()) {
-                    deleteRecursive(p);
+                    FileOperations.deleteRecursive(p);
                 } else {
                     Files.deleteIfExists(p);
                 }
@@ -700,55 +703,6 @@ public class App extends Application {
         refresh();
     }
 
-    private void deleteRecursive(Path root) throws Exception {
-        if (!Files.exists(root)) return;
-        if (Files.isDirectory(root)) {
-            try (java.util.stream.Stream<Path> walk = Files.walk(root)) {
-                java.util.List<Path> all = walk.sorted(Comparator.reverseOrder()).toList();
-                for (Path p : all) {
-                    Files.deleteIfExists(p);
-                }
-            }
-        } else {
-            Files.deleteIfExists(root);
-        }
-    }
-
-    private void copyRecursive(Path src, Path dst) throws Exception {
-        if (!Files.exists(src)) return;
-        if (Files.isDirectory(src)) {
-            // Create root folder
-            Files.createDirectories(dst);
-            try (java.util.stream.Stream<Path> walk = Files.walk(src)) {
-                for (Path p : walk.toList()) {
-                    Path rel = src.relativize(p);
-                    Path target = dst.resolve(rel);
-                    if (Files.isDirectory(p)) {
-                        Files.createDirectories(target);
-                    } else {
-                        Files.createDirectories(target.getParent());
-                        Files.copy(p, target, StandardCopyOption.REPLACE_EXISTING);
-                    }
-                }
-            }
-        } else {
-            Files.createDirectories(dst.getParent());
-            Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
-        }
-    }
-
-    private void moveRecursive(Path src, Path dst) throws Exception {
-        // Try simple move first
-        try {
-            Files.createDirectories(dst.getParent());
-            Files.move(src, dst, StandardCopyOption.REPLACE_EXISTING);
-            return;
-        } catch (Exception ignore) {
-            // Fall back to copy+delete (handles moving into existing/non-empty dirs or across filesystems)
-        }
-        copyRecursive(src, dst);
-        deleteRecursive(src);
-    }
 
     private void addToHistoryIfValid(String leftPath, String rightPath) {
         try {
@@ -770,48 +724,23 @@ public class App extends Application {
     }
 
     private void loadHistoryFromPrefs() {
-        try {
-            if (prefs == null) return;
-            historyItems.clear();
-            int count = Math.max(0, Math.min(10, prefs.getInt(PREF_HISTORY_COUNT, 0)));
-            for (int i = 0; i < count; i++) {
-                String v = prefs.get(PREF_HISTORY_PREFIX + i, null);
-                if (v != null && !v.isBlank()) {
-                    historyItems.add(v);
-                }
-            }
-            // Ensure cap at 10
-            if (historyItems.size() > 10) {
-                historyItems.remove(10, historyItems.size());
-            }
-        } catch (Exception ignored) {
+        historyItems.setAll(historyService.loadHistory());
+        // Ensure cap at 10 for UI list as well
+        if (historyItems.size() > Constants.MAX_HISTORY_ITEMS) {
+            historyItems.remove(Constants.MAX_HISTORY_ITEMS, historyItems.size());
         }
     }
 
     private void saveHistoryToPrefs() {
-        try {
-            if (prefs == null) return;
-            // Clear existing keys first
-            int prev = prefs.getInt(PREF_HISTORY_COUNT, 0);
-            for (int i = 0; i < Math.max(prev, 10); i++) {
-                prefs.remove(PREF_HISTORY_PREFIX + i);
-            }
-            int count = Math.min(10, historyItems.size());
-            prefs.putInt(PREF_HISTORY_COUNT, count);
-            for (int i = 0; i < count; i++) {
-                prefs.put(PREF_HISTORY_PREFIX + i, historyItems.get(i));
-            }
-            prefs.flush();
-        } catch (Exception ignored) {
-        }
+        historyService.saveHistory(historyItems);
     }
 
     private void refresh() {
         String leftPath = leftPathField.getText() == null ? "" : leftPathField.getText().trim();
         String rightPath = rightPathField.getText() == null ? "" : rightPathField.getText().trim();
 
-        Map<String, FileInfo> leftMap = scanDir(leftPath);
-        Map<String, FileInfo> rightMap = scanDir(rightPath);
+        Map<String, FileInfo> leftMap = DirectoryScanner.scanDir(leftPath);
+        Map<String, FileInfo> rightMap = DirectoryScanner.scanDir(rightPath);
 
         TreeSet<String> names = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         names.addAll(leftMap.keySet());
@@ -830,32 +759,6 @@ public class App extends Application {
         addToHistoryIfValid(leftPath, rightPath);
     }
 
-    private Map<String, FileInfo> scanDir(String pathText) {
-        Map<String, FileInfo> map = new LinkedHashMap<>();
-        if (pathText == null || pathText.isBlank()) {
-            return map;
-        }
-        Path p = Path.of(pathText);
-        if (!Files.isDirectory(p)) {
-            return map;
-        }
-        try {
-            Files.list(p)
-                .sorted(Comparator.comparing(Path::getFileName, (a, b) -> a.toString().compareToIgnoreCase(b.toString())))
-                .forEach(child -> {
-                    try {
-                        BasicFileAttributes attrs = Files.readAttributes(child, BasicFileAttributes.class);
-                        boolean isDir = attrs.isDirectory();
-                        long size = isDir ? -1L : attrs.size();
-                        Instant mod = attrs.lastModifiedTime().toInstant();
-                        map.put(child.getFileName().toString(), new FileInfo(child.getFileName().toString(), isDir, size, mod));
-                    } catch (Exception ignored) {
-                    }
-                });
-        } catch (Exception ignored) {
-        }
-        return map;
-    }
 
     @Override
     public void stop() {
@@ -867,73 +770,4 @@ public class App extends Application {
         launch(args);
     }
 
-    // Model classes
-    public static class FileInfo {
-        private final SimpleStringProperty name = new SimpleStringProperty("");
-        private final boolean directory;
-        private final SimpleLongProperty size = new SimpleLongProperty(-1);
-        private final SimpleObjectProperty<Instant> modified = new SimpleObjectProperty<>(null);
-
-        public FileInfo(String name, boolean directory, long size, Instant modified) {
-            this.name.set(name);
-            this.directory = directory;
-            this.size.set(size);
-            this.modified.set(modified);
-        }
-
-        public String getName() { return name.get(); }
-        public boolean isDirectory() { return directory; }
-        public long getSize() { return size.get(); }
-        public Instant getModified() { return modified.get(); }
-
-        public String getSizeDisplay() {
-            if (directory) return ""; // no size for directories per spec
-            long s = getSize();
-            return Long.toString(s);
-        }
-
-        public String getModifiedDisplay() {
-            Instant m = getModified();
-            if (m == null) return "";
-            LocalDateTime ldt = LocalDateTime.ofInstant(m, ZoneId.systemDefault());
-            return DT_FMT.format(ldt);
-        }
-    }
-
-    public static class PairedEntry {
-        private final FileInfo left;
-        private final FileInfo right;
-
-        public PairedEntry(FileInfo left, FileInfo right) {
-            this.left = left;
-            this.right = right;
-        }
-
-        // Left getters for TableView
-        public String getLeftName() { return left == null ? "" : decorateName(left); }
-        public String getLeftSizeDisplay() { return left == null ? "" : left.getSizeDisplay(); }
-        public String getLeftModifiedDisplay() { return left == null ? "" : left.getModifiedDisplay(); }
-
-        // Right getters
-        public String getRightName() { return right == null ? "" : decorateName(right); }
-        public String getRightSizeDisplay() { return right == null ? "" : right.getSizeDisplay(); }
-        public String getRightModifiedDisplay() { return right == null ? "" : right.getModifiedDisplay(); }
-
-        public boolean isOrphanLeft() { return left != null && right == null; }
-        public boolean isOrphanRight() { return right != null && left == null; }
-
-        public boolean isDifferent() {
-            if (left == null || right == null) return false; // only flag mismatch when both exist
-            if (left.isDirectory() != right.isDirectory()) return true;
-            boolean sizeDiff = !left.isDirectory() && left.getSize() != right.getSize();
-            Instant lm = left.getModified();
-            Instant rm = right.getModified();
-            boolean modDiff = (lm == null && rm != null) || (lm != null && rm == null) || (lm != null && !lm.equals(rm));
-            return sizeDiff || modDiff;
-        }
-
-        private String decorateName(FileInfo fi) {
-            return fi.isDirectory() ? fi.getName() + File.separator : fi.getName();
-        }
-    }
 }
