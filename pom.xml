@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>net.parksy.foldercompare</groupId>
+  <artifactId>folderCompare</artifactId>
+  <version>1.0-SNAPSHOT</version>
+
+  <name>folderCompare</name>
+
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <maven.compiler.release>17</maven.compiler.release>
+    <exec-maven-plugin.mainClass>net.parksy.foldercompare.App</exec-maven-plugin.mainClass>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>org.junit</groupId>
+        <artifactId>junit-bom</artifactId>
+        <version>5.11.0</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <!-- JavaFX UI framework -->
+    <dependency>
+      <groupId>org.openjfx</groupId>
+      <artifactId>javafx-controls</artifactId>
+      <version>21.0.5</version>
+    </dependency>
+
+    <!-- Tests -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-api</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Optionally: parameterized tests support -->
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter-params</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+      <plugins>
+          <!-- Maven compiler plugin -->
+          <plugin>
+              <artifactId>maven-compiler-plugin</artifactId>
+              <version>3.10.1</version>
+              <configuration>
+                  <release>17</release>
+              </configuration>
+          </plugin>
+
+          <!-- Maven exec plugin to run JavaFX -->
+          <plugin>
+              <groupId>org.codehaus.mojo</groupId>
+              <artifactId>exec-maven-plugin</artifactId>
+              <version>3.1.0</version>
+              <configuration>
+                  <mainClass>${exec-maven-plugin.mainClass}</mainClass>
+                  <commandlineArgs></commandlineArgs>
+                  <arguments>
+                      <argument>--module-path</argument>
+                      <argument>${javafx.module.path}</argument>
+                      <argument>--add-modules</argument>
+                      <argument>javafx.controls,javafx.fxml</argument>
+                  </arguments>
+              </configuration>
+          </plugin>
+          <plugin>
+              <artifactId>maven-jar-plugin</artifactId>
+              <configuration>
+                  <archive>
+                      <manifest>
+                          <addClasspath>false</addClasspath>
+                          <mainClass>${exec-maven-plugin.mainClass}</mainClass>
+                      </manifest>
+                  </archive>
+              </configuration>
+          </plugin>
+          <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-shade-plugin</artifactId>
+              <version>3.5.3</version>
+              <executions>
+                  <execution>
+                      <phase>package</phase>
+                      <goals>
+                          <goal>shade</goal>
+                      </goals>
+                      <configuration>
+                          <createDependencyReducedPom>true</createDependencyReducedPom>
+                          <artifactSet>
+                              <excludes>
+                                  <exclude>org.junit.jupiter:junit-jupiter-api</exclude>
+                                  <exclude>org.junit.jupiter:junit-jupiter-params</exclude>
+                              </excludes>
+                          </artifactSet>
+                          <transformers>
+                              <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                                  <mainClass>${exec-maven-plugin.mainClass}</mainClass>
+                              </transformer>
+                          </transformers>
+                      </configuration>
+                  </execution>
+              </executions>
+          </plugin>
+      </plugins>
+
+  </build>
+</project>
