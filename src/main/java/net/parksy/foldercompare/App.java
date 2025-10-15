@@ -50,6 +50,7 @@ public class App extends Application {
     private final ObservableList<PairedEntry> items = FXCollections.observableArrayList();
 
     private Button copyBtn;
+    private Button deleteBtn;
 
     private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
@@ -60,11 +61,13 @@ public class App extends Application {
         // Toolbar at top
         copyBtn = new Button("Copy", new Label("⧉"));
         copyBtn.setContentDisplay(ContentDisplay.LEFT);
+        deleteBtn = new Button("Delete", new Label("🗑"));
+        deleteBtn.setContentDisplay(ContentDisplay.LEFT);
         Button refreshBtn = new Button("Refresh", new Label("↻"));
         refreshBtn.setContentDisplay(ContentDisplay.LEFT);
         Button swapBtn = new Button("Swap", new Label("⇄"));
         swapBtn.setContentDisplay(ContentDisplay.LEFT);
-        ToolBar toolBar = new ToolBar(copyBtn, refreshBtn, swapBtn);
+        ToolBar toolBar = new ToolBar(copyBtn, deleteBtn, refreshBtn, swapBtn);
 
         // Left panel
         leftPathField.setPromptText("Enter folder path and press Enter or drop a folder here");
@@ -118,11 +121,12 @@ public class App extends Application {
             refresh();
         });
         copyBtn.setOnAction(e -> handleCopy());
-        // Enable Copy only if some row is selected on either side
-        copyBtn.disableProperty().bind(
-                Bindings.isEmpty(leftTable.getSelectionModel().getSelectedItems())
-                        .and(Bindings.isEmpty(rightTable.getSelectionModel().getSelectedItems()))
-        );
+        deleteBtn.setOnAction(e -> handleDelete());
+        // Enable Copy/Delete only if some row is selected on either side
+        var noSelection = Bindings.isEmpty(leftTable.getSelectionModel().getSelectedItems())
+                .and(Bindings.isEmpty(rightTable.getSelectionModel().getSelectedItems()));
+        copyBtn.disableProperty().bind(noSelection);
+        deleteBtn.disableProperty().bind(noSelection);
 
         // Selection exclusivity and icon update
         leftTable.getSelectionModel().getSelectedItems().addListener((javafx.collections.ListChangeListener<PairedEntry>) c -> {
@@ -172,6 +176,10 @@ public class App extends Application {
         TableColumn<PairedEntry, String> sizeCol = new TableColumn<>("Size");
         sizeCol.setCellValueFactory(new PropertyValueFactory<>("leftSizeDisplay"));
         sizeCol.setStyle("-fx-alignment: CENTER-RIGHT;");
+        // Prefer a smaller initial width for Size column
+        sizeCol.setPrefWidth(60);
+        sizeCol.setMinWidth(40);
+        sizeCol.setMaxWidth(140);
         sizeCol.setCellFactory(col -> new TableCell<>() {
             @Override protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
@@ -210,6 +218,10 @@ public class App extends Application {
         TableColumn<PairedEntry, String> sizeCol = new TableColumn<>("Size");
         sizeCol.setCellValueFactory(new PropertyValueFactory<>("rightSizeDisplay"));
         sizeCol.setStyle("-fx-alignment: CENTER-RIGHT;");
+        // Prefer a smaller initial width for Size column
+        sizeCol.setPrefWidth(60);
+        sizeCol.setMinWidth(40);
+        sizeCol.setMaxWidth(140);
         sizeCol.setCellFactory(col -> new TableCell<>() {
             @Override protected void updateItem(String item, boolean empty) {
                 super.updateItem(item, empty);
@@ -377,6 +389,116 @@ public class App extends Application {
         }
 
         refresh();
+    }
+
+    private void handleDelete() {
+        // Determine which side is active
+        boolean leftActive = !leftTable.getSelectionModel().getSelectedItems().isEmpty();
+        boolean rightActive = !rightTable.getSelectionModel().getSelectedItems().isEmpty();
+        if (!leftActive && !rightActive) {
+            System.out.println("[INFO] No selection to delete.");
+            return;
+        }
+        if (leftActive && rightActive) {
+            Alert a = new Alert(Alert.AlertType.INFORMATION, "Select rows on only one side to delete.", ButtonType.OK);
+            a.setHeaderText("Ambiguous selection");
+            a.showAndWait();
+            return;
+        }
+
+        boolean deleteLeft = leftActive; // if left is active, delete on left; otherwise on right
+        List<PairedEntry> selected = deleteLeft
+                ? new ArrayList<>(leftTable.getSelectionModel().getSelectedItems())
+                : new ArrayList<>(rightTable.getSelectionModel().getSelectedItems());
+
+        if (selected.isEmpty()) {
+            return;
+        }
+
+        String targetFolder = deleteLeft ? leftPathField.getText() : rightPathField.getText();
+        Path targetDir = Path.of(targetFolder == null ? "" : targetFolder);
+        if (!Files.isDirectory(targetDir)) {
+            Alert a = new Alert(Alert.AlertType.WARNING, "The target path must be a valid directory.", ButtonType.OK);
+            a.setHeaderText("Invalid folder");
+            a.showAndWait();
+            return;
+        }
+
+        // Collect targets with names and directory flag
+        List<FileInfo> targets = new ArrayList<>();
+        for (PairedEntry pe : selected) {
+            FileInfo fi = deleteLeft ? pe.left : pe.right;
+            if (fi != null) {
+                targets.add(fi);
+            }
+        }
+        if (targets.isEmpty()) {
+            Alert a = new Alert(Alert.AlertType.INFORMATION, "Nothing to delete.", ButtonType.OK);
+            a.setHeaderText("No items");
+            a.showAndWait();
+            return;
+        }
+
+        long dirCount = targets.stream().filter(FileInfo::isDirectory).count();
+        long fileCount = targets.size() - dirCount;
+
+        String header = "Delete " + targets.size() + (targets.size() == 1 ? " item?" : " items?");
+        StringBuilder content = new StringBuilder();
+        content.append(deleteLeft ? "From LEFT folder" : "From RIGHT folder").append(" (\"")
+                .append(targetDir).append("\")\n\n");
+        content.append("Files: ").append(fileCount).append("\n");
+        content.append("Folders: ").append(dirCount).append("\n\n");
+        content.append("This action will permanently delete the selected items.\n");
+
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
+        confirm.setTitle("Confirm Delete");
+        confirm.setHeaderText(header);
+        confirm.setContentText(content.toString());
+        confirm.getButtonTypes().setAll(ButtonType.YES, ButtonType.NO);
+        ButtonType result = confirm.showAndWait().orElse(ButtonType.NO);
+        if (result != ButtonType.YES) {
+            return;
+        }
+
+        int success = 0;
+        int fail = 0;
+        for (FileInfo fi : targets) {
+            Path p = targetDir.resolve(fi.getName());
+            try {
+                if (fi.isDirectory()) {
+                    deleteRecursive(p);
+                } else {
+                    Files.deleteIfExists(p);
+                }
+                success++;
+                System.out.println("[INFO] Deleted: " + p);
+            } catch (Exception ex) {
+                fail++;
+                System.out.println("[WARN] Delete failed for '" + p + "': " + ex.getMessage());
+            }
+        }
+
+        if (fail > 0) {
+            Alert done = new Alert(Alert.AlertType.INFORMATION, success + " deleted, " + fail + " failed.", ButtonType.OK);
+            done.setHeaderText("Delete completed with issues");
+            done.showAndWait();
+        }
+
+        refresh();
+    }
+
+    private void deleteRecursive(Path root) throws Exception {
+        if (!Files.exists(root)) return;
+        if (Files.isDirectory(root)) {
+            try (java.util.stream.Stream<Path> walk = Files.walk(root)) {
+                java.util.List<Path> all = walk.sorted(Comparator.reverseOrder()).toList();
+                for (Path p : all) {
+                    Files.deleteIfExists(p);
+                }
+            }
+        } else {
+            Files.deleteIfExists(root);
+        }
     }
 
     private void refresh() {
