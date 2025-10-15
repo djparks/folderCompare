@@ -15,7 +15,9 @@
   - [X] Unselect items on opposite side.
   - [X] Add color for only one side and if files don't match
   - [X] Right-click to set as base folder (one side or both if matched)
+- History of folders compared.
   - [X] Add a history of folders chosen, keep the last 10, allowing selection using a drop-down.
+  - [ ] Only add to history if the folder is not already in the history and both sides contain a valid folder.
 - Move Button
   - [X] Add a move button.
   - [ ] Change the icon in the move button to be an arrow pointing left if rows on the right are selected and pointing right if rows on the left are selected.
