@@ -140,6 +140,8 @@ public class App extends Application {
         HBox.setHgrow(rightPane, Priority.ALWAYS);
         leftPane.setFillWidth(true);
         rightPane.setFillWidth(true);
+        // Allow the center area (which contains the tables) to grow/shrink with the window height
+        VBox.setVgrow(center, Priority.ALWAYS);
 
         leftTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         rightTable.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
@@ -248,6 +250,8 @@ public class App extends Application {
 
         Scene scene = new Scene(root, 1200, 700);
         stage.setScene(scene);
+        // Set minimum window height to the startup height (i.e., just below the tables at launch)
+        stage.setOnShown(e -> stage.setMinHeight(stage.getHeight()));
         stage.show();
     }
 

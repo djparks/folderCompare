@@ -23,5 +23,7 @@
   - [X] Change the icon in the move button to be an arrow pointing left if rows on the right are selected and pointing right if rows on the left are selected.
   - [ ] In the verification dialog, have the word left on the left side and right on the right side, with the arrow pointing the to direction the of the move.
 - Window Formatting
-  - [ ] Make minimum height extend just below the tables. 
-  - [ ] Make the table heights resize with the window.
+  - [X] Make the minimum window height extend just below the tables at startup. 
+  - [X] Make the table heights resize with the window.
+- Refactoring
+  - [ ] get rid of god class.
