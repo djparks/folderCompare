@@ -2,18 +2,12 @@ package net.parksy.foldercompare;
 
 import javafx.application.Application;
 import javafx.beans.binding.Bindings;
-import javafx.beans.property.SimpleLongProperty;
-import javafx.beans.property.SimpleObjectProperty;
-import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
-import javafx.scene.input.Clipboard;
-import javafx.scene.input.ClipboardContent;
 import javafx.scene.input.DragEvent;
 import javafx.scene.input.Dragboard;
 import javafx.scene.input.TransferMode;
@@ -27,27 +21,22 @@ import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import net.parksy.foldercompare.model.FileInfo;
 import net.parksy.foldercompare.model.PairedEntry;
 import net.parksy.foldercompare.fs.DirectoryScanner;
 import net.parksy.foldercompare.fs.FileOperations;
 import net.parksy.foldercompare.prefs.HistoryService;
-import net.parksy.foldercompare.Constants;
+
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
-import java.util.prefs.Preferences;
 
 public class App extends Application {
 
+    public static final int SIZE_COL_PREF_WIDTH = 40;
+    public static final int SIZE_COL_MIN_WIDTH = 20;
     private final TextField leftPathField = new TextField();
     private final TextField rightPathField = new TextField();
 
@@ -60,7 +49,6 @@ public class App extends Application {
 
     private Button copyBtn;
     private Button moveBtn;
-    private Button deleteBtn;
 
     private final ComboBox<String> historyCombo = new ComboBox<>();
     private final ObservableList<String> historyItems = FXCollections.observableArrayList();
@@ -79,7 +67,7 @@ public class App extends Application {
         copyBtn.setContentDisplay(ContentDisplay.LEFT);
         moveBtn = new Button("Move", new Label(Constants.ICON_MOVE_NEUTRAL));
         moveBtn.setContentDisplay(ContentDisplay.LEFT);
-        deleteBtn = new Button("Delete", new Label(Constants.ICON_TRASH));
+        Button deleteBtn = new Button("Delete", new Label(Constants.ICON_TRASH));
         deleteBtn.setContentDisplay(ContentDisplay.LEFT);
         Button refreshBtn = new Button("Refresh", new Label(Constants.ICON_REFRESH));
         refreshBtn.setContentDisplay(ContentDisplay.LEFT);
@@ -274,8 +262,8 @@ public class App extends Application {
         sizeCol.setCellValueFactory(new PropertyValueFactory<>("leftSizeDisplay"));
         sizeCol.setStyle("-fx-alignment: CENTER-RIGHT;");
         // Prefer a smaller initial width for Size column
-        sizeCol.setPrefWidth(60);
-        sizeCol.setMinWidth(40);
+        sizeCol.setPrefWidth(SIZE_COL_PREF_WIDTH);
+        sizeCol.setMinWidth(SIZE_COL_MIN_WIDTH);
         sizeCol.setMaxWidth(140);
         sizeCol.setCellFactory(col -> new TableCell<>() {
             @Override protected void updateItem(String item, boolean empty) {
@@ -316,8 +304,8 @@ public class App extends Application {
         sizeCol.setCellValueFactory(new PropertyValueFactory<>("rightSizeDisplay"));
         sizeCol.setStyle("-fx-alignment: CENTER-RIGHT;");
         // Prefer a smaller initial width for Size column
-        sizeCol.setPrefWidth(60);
-        sizeCol.setMinWidth(40);
+        sizeCol.setPrefWidth(SIZE_COL_PREF_WIDTH);
+        sizeCol.setMinWidth(SIZE_COL_MIN_WIDTH);
         sizeCol.setMaxWidth(140);
         sizeCol.setCellFactory(col -> new TableCell<>() {
             @Override protected void updateItem(String item, boolean empty) {
@@ -360,7 +348,7 @@ public class App extends Application {
     private void addFolderDragDrop(TextField field) {
         field.setOnDragOver((DragEvent event) -> {
             Dragboard db = event.getDragboard();
-            boolean accept = db.hasFiles() && db.getFiles().stream().anyMatch(f -> f.isDirectory());
+            boolean accept = db.hasFiles() && db.getFiles().stream().anyMatch(File::isDirectory);
             if (accept) {
                 event.acceptTransferModes(TransferMode.COPY);
             }
@@ -459,16 +447,15 @@ public class App extends Application {
 
         String direction = leftToRight ? "left → right" : "right → left";
         String header = "Copy " + targets.size() + (targets.size() == 1 ? " item?" : " items?");
-        StringBuilder content = new StringBuilder();
-        content.append("From ").append(direction).append("\n\n");
-        content.append("Files: ").append(fileCount).append("\n");
-        content.append("Folders: ").append(dirCount).append("\n\n");
-        content.append("Existing files with the same name will be overwritten.");
+        String content = "From " + direction + "\n\n" +
+                "Files: " + fileCount + "\n" +
+                "Folders: " + dirCount + "\n\n" +
+                "Existing files with the same name will be overwritten.";
 
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
         confirm.setTitle("Confirm Copy");
         confirm.setHeaderText(header);
-        confirm.setContentText(content.toString());
+        confirm.setContentText(content);
         confirm.getButtonTypes().setAll(ButtonType.YES, ButtonType.NO);
         ButtonType result = confirm.showAndWait().orElse(ButtonType.NO);
         if (result != ButtonType.YES) {
@@ -555,17 +542,16 @@ public class App extends Application {
 
         String direction = leftToRight ? "left → right" : "right → left";
         String header = "Move " + targets.size() + (targets.size() == 1 ? " item?" : " items?");
-        StringBuilder content = new StringBuilder();
-        content.append("From ").append(direction).append("\n\n");
-        content.append("Files: ").append(fileCount).append("\n");
-        content.append("Folders: ").append(dirCount).append("\n\n");
-        content.append("Warning: Existing files with the same name at the destination will be overwritten.\n");
-        content.append("Items will be removed from the source after moving.");
+        String content = "From " + direction + "\n\n" +
+                "Files: " + fileCount + "\n" +
+                "Folders: " + dirCount + "\n\n" +
+                "Warning: Existing files with the same name at the destination will be overwritten.\n" +
+                "Items will be removed from the source after moving.";
 
         Alert confirm = new Alert(Alert.AlertType.CONFIRMATION);
         confirm.setTitle("Confirm Move");
         confirm.setHeaderText(header);
-        confirm.setContentText(content.toString());
+        confirm.setContentText(content);
         confirm.getButtonTypes().setAll(ButtonType.YES, ButtonType.NO);
         ButtonType result = confirm.showAndWait().orElse(ButtonType.NO);
         if (result != ButtonType.YES) {
