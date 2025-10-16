@@ -15,6 +15,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
+import javafx.scene.image.Image;
 import javafx.stage.Stage;
 
 import java.io.File;
@@ -34,6 +35,49 @@ import java.util.Map;
 import java.util.TreeSet;
 
 public class App extends Application {
+
+    /**
+     * Loads application icons from classpath resources.
+     * Prefers PNG files under /icon directory; falls back to root resources if needed.
+     * This works on macOS and Windows; JavaFX uses these sizes for taskbar/dock/title bar.
+     */
+    private List<Image> loadAppIcons() {
+        String[] preferred = new String[] {
+                "/icon/icons8-compare-16.png",
+                "/icon/icons8-compare-32.png",
+                "/icon/icons8-compare-64.png"
+        };
+        String[] fallback = new String[] {
+                "/icons8-compare-16.png",
+                "/icons8-compare-32.png",
+                "/icons8-compare-64.png"
+        };
+        List<Image> images = new ArrayList<>();
+        ClassLoader cl = getClass().getClassLoader();
+        // Try preferred locations first
+        for (String path : preferred) {
+            try {
+                var is = getClass().getResourceAsStream(path);
+                if (is != null) {
+                    images.add(new Image(is));
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        // If none loaded yet, try fallback root locations
+        if (images.isEmpty()) {
+            for (String path : fallback) {
+                try {
+                    var is = getClass().getResourceAsStream(path);
+                    if (is != null) {
+                        images.add(new Image(is));
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return images;
+    }
 
     public static final int SIZE_COL_PREF_WIDTH = 40;
     public static final int SIZE_COL_MIN_WIDTH = 20;
@@ -241,6 +285,13 @@ public class App extends Application {
 
         Scene scene = new Scene(root, 1200, 700);
         stage.setScene(scene);
+
+        // Load application icons (supports both Mac and Windows)
+        List<Image> appIcons = loadAppIcons();
+        if (!appIcons.isEmpty()) {
+            stage.getIcons().setAll(appIcons);
+        }
+
         // Set minimum window height to the startup height (i.e., just below the tables at launch)
         stage.setOnShown(e -> stage.setMinHeight(stage.getHeight()));
         stage.show();
