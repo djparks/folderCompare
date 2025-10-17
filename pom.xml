@@ -50,6 +50,7 @@
   </dependencies>
 
   <build>
+      <finalName>folderCompare</finalName>
       <plugins>
           <!-- Maven compiler plugin -->
           <plugin>
@@ -98,6 +99,7 @@
                           <goal>shade</goal>
                       </goals>
                       <configuration>
+                          <shadedArtifactAttached>false</shadedArtifactAttached>
                           <createDependencyReducedPom>true</createDependencyReducedPom>
                           <artifactSet>
                               <excludes>
