@@ -12,41 +12,32 @@ This makes it easy to spot items missing on one side or differences in size/time
 
 
 ## Requirements
-- JDK 17 installed and available on PATH
-- No system Maven required; project includes Maven Wrapper
-- A desktop environment capable of launching JavaFX windows (Windows, macOS, or Linux with GUI)
-
-Note: Do not add Spring/Spring Boot; this project uses plain Java + JavaFX.
-
+- Java 17 or newer (JDK)
+- Maven 3.8+
 
 ## Build
-Use the Maven Wrapper (recommended):
 
-- Clean build:
-  
-  ./mvnw -q clean package
+This project is configured to produce a single executable JAR that bundles the JavaFX libraries for your platform.
 
-Outputs:
-- Plain app JAR: target/folderCompare.jar (for use with your own JavaFX SDK/module path)
-- Platform runtime image (recommended): build it with the JavaFX plugin:
-  
-  ./mvnw -q clean package javafx:jlink
+1) Clean and package:
 
-This produces a self-contained runtime image under target/ with a bin/folderCompare launcher that includes the JRE and JavaFX modules.
+```
+mvn clean package
+```
 
+After a successful build, you will find the executable JAR:
+
+- `target/folderCompare.jar`
 
 ## Run
-Recommended (development):
 
-  ./mvnw -q javafx:run
+Run the application with:
 
-Recommended (distribution): build and use the jlink runtime image:
+```
+java -jar target/folderCompare.jar
+```
 
-  ./mvnw -q clean package javafx:jlink
-  # Then run the generated launcher (path varies by OS):
-  target/**/bin/folderCompare
-
-Alternatively, run the plain JAR with your local JavaFX SDK on the module path:
+No extra module parameters are required as the JAR includes the JavaFX dependencies (for your platform) on the classpath.
 
   java \
     --module-path /path/to/javafx-sdk-21.0.5/lib \

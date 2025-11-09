@@ -803,8 +803,6 @@ public class App extends Application {
         saveHistoryToPrefs();
     }
 
-    public static void main(String[] args) {
-        launch(args);
-    }
+
 
 }
