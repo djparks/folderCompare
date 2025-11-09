@@ -22,23 +22,40 @@ Note: Do not add Spring/Spring Boot; this project uses plain Java + JavaFX.
 ## Build
 Use the Maven Wrapper (recommended):
 
-- Clean build and package:
+- Clean build:
   
   ./mvnw -q clean package
 
-Artifacts are created in `target/`:
-- `folderCompare-1.0-SNAPSHOT.jar` (original)
-- `folderCompare-1.0-SNAPSHOT-shaded.jar` (fat/executable JAR)
+Outputs:
+- Plain app JAR: target/folderCompare.jar (for use with your own JavaFX SDK/module path)
+- Platform runtime image (recommended): build it with the JavaFX plugin:
+  
+  ./mvnw -q clean package javafx:jlink
 
-The shaded JAR contains runtime dependencies (including JavaFX controls) and excludes test-only libraries.
+This produces a self-contained runtime image under target/ with a bin/folderCompare launcher that includes the JRE and JavaFX modules.
 
 
 ## Run
-Run the shaded JAR:
+Recommended (development):
 
-  java -jar target/folderCompare-1.0-SNAPSHOT-shaded.jar
+  ./mvnw -q javafx:run
 
-Main class: `net.parksy.foldercompare.App`.
+Recommended (distribution): build and use the jlink runtime image:
+
+  ./mvnw -q clean package javafx:jlink
+  # Then run the generated launcher (path varies by OS):
+  target/**/bin/folderCompare
+
+Alternatively, run the plain JAR with your local JavaFX SDK on the module path:
+
+  java \
+    --module-path /path/to/javafx-sdk-21.0.5/lib \
+    --add-modules javafx.controls \
+    -jar target/folderCompare.jar
+
+Notes:
+- Replace /path/to/javafx-sdk-21.0.5/lib with the path to the JavaFX SDK lib directory for your OS/arch.
+- If you add FXML, include it in --add-modules: javafx.controls,javafx.fxml.
 
 Usage:
 - In the UI, type two folder paths (e.g., `C:\Users\you\Documents` and `D:\Backup\Documents`, or `/Users/you/Documents` and `/Volumes/Backup/Documents`).
@@ -46,6 +63,7 @@ Usage:
 - Columns can be resized; rows are aligned across both tables for easy scanning.
 
 Troubleshooting (JavaFX):
+- If you see “NoClassDefFoundError: javafx/application/Application”, you are running the plain JAR without JavaFX on the module path. Use javafx:run, the jlink launcher, or provide --module-path as shown above.
 - On Linux, ensure you’re running in a graphical session and have appropriate graphics drivers. If running over SSH, enable X forwarding or use a local desktop session.
 
 

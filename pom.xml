@@ -61,22 +61,6 @@
               </configuration>
           </plugin>
 
-          <!-- Maven exec plugin to run JavaFX -->
-          <plugin>
-              <groupId>org.codehaus.mojo</groupId>
-              <artifactId>exec-maven-plugin</artifactId>
-              <version>3.1.0</version>
-              <configuration>
-                  <mainClass>${exec-maven-plugin.mainClass}</mainClass>
-                  <commandlineArgs></commandlineArgs>
-                  <arguments>
-                      <argument>--module-path</argument>
-                      <argument>${javafx.module.path}</argument>
-                      <argument>--add-modules</argument>
-                      <argument>javafx.controls,javafx.fxml</argument>
-                  </arguments>
-              </configuration>
-          </plugin>
           <plugin>
               <artifactId>maven-jar-plugin</artifactId>
               <configuration>
@@ -88,33 +72,19 @@
                   </archive>
               </configuration>
           </plugin>
+          <!-- JavaFX Maven Plugin for running and creating a runtime image (jlink) -->
           <plugin>
-              <groupId>org.apache.maven.plugins</groupId>
-              <artifactId>maven-shade-plugin</artifactId>
-              <version>3.5.3</version>
-              <executions>
-                  <execution>
-                      <phase>package</phase>
-                      <goals>
-                          <goal>shade</goal>
-                      </goals>
-                      <configuration>
-                          <shadedArtifactAttached>false</shadedArtifactAttached>
-                          <createDependencyReducedPom>true</createDependencyReducedPom>
-                          <artifactSet>
-                              <excludes>
-                                  <exclude>org.junit.jupiter:junit-jupiter-api</exclude>
-                                  <exclude>org.junit.jupiter:junit-jupiter-params</exclude>
-                              </excludes>
-                          </artifactSet>
-                          <transformers>
-                              <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                  <mainClass>${exec-maven-plugin.mainClass}</mainClass>
-                              </transformer>
-                          </transformers>
-                      </configuration>
-                  </execution>
-              </executions>
+              <groupId>org.openjfx</groupId>
+              <artifactId>javafx-maven-plugin</artifactId>
+              <version>0.0.8</version>
+              <configuration>
+                  <mainClass>${exec-maven-plugin.mainClass}</mainClass>
+                  <!-- Runtime image (jlink) options -->
+                  <launcher>folderCompare</launcher>
+                  <stripDebug>true</stripDebug>
+                  <noManPages>true</noManPages>
+                  <noHeaderFiles>true</noHeaderFiles>
+              </configuration>
           </plugin>
       </plugins>
 
