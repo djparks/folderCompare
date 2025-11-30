@@ -27,6 +27,7 @@ import net.parksy.foldercompare.model.FileInfo;
 import net.parksy.foldercompare.model.PairedEntry;
 import net.parksy.foldercompare.fs.DirectoryScanner;
 import net.parksy.foldercompare.fs.FileOperations;
+import net.parksy.foldercompare.fs.CompareUtil;
 import net.parksy.foldercompare.prefs.HistoryService;
 
 import java.util.ArrayList;
@@ -389,11 +390,38 @@ public class App extends Application {
             boolean orphan = leftSide ? pe.isOrphanLeft() : pe.isOrphanRight();
             if (orphan) {
                 color = Color.PURPLE;
-            } else if (pe.isDifferent()) {
+            } else if (isDifferentByContent(pe)) {
                 color = Color.RED;
             }
         }
         cell.setTextFill(color);
+    }
+
+    private boolean isDifferentByContent(PairedEntry pe) {
+        if (pe == null) return false;
+        var l = pe.getLeft();
+        var r = pe.getRight();
+        if (l == null || r == null) return false; // orphans handled separately for styling
+        // If one is dir and other is file => different
+        if (l.isDirectory() != r.isDirectory()) return true;
+
+        String leftRootText = leftPathField.getText();
+        String rightRootText = rightPathField.getText();
+        if (leftRootText == null || rightRootText == null) return false;
+        Path leftRoot = Path.of(leftRootText);
+        Path rightRoot = Path.of(rightRootText);
+
+        try {
+            if (l.isDirectory()) {
+                // Compare immediate files inside directories
+                return !CompareUtil.directoriesEqual(leftRoot.resolve(l.getName()), rightRoot.resolve(r.getName()));
+            } else {
+                // Compare file content using Files.mismatch
+                return !CompareUtil.filesEqual(leftRoot.resolve(l.getName()), rightRoot.resolve(r.getName()));
+            }
+        } catch (Exception ex) {
+            return true; // be conservative: on error treat as different
+        }
     }
 
     private void addFolderDragDrop(TextField field) {
