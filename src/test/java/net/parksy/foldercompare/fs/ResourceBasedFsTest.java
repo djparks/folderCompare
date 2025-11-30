@@ -32,6 +32,13 @@ class ResourceBasedFsTest {
     }
 
     @Test
+    void filesEqual_onDifferentResourceFiles_false() {
+        Path f1 = resourceDir("folder1").resolve("diff.txt");
+        Path f2 = resourceDir("folder2").resolve("diff.txt");
+        assertFalse(CompareUtil.filesEqual(f1, f2));
+    }
+
+    @Test
     void directoriesEqual_differentResourceFolders_false() {
         Path d1 = resourceDir("folder1");
         Path d2 = resourceDir("folder2");
